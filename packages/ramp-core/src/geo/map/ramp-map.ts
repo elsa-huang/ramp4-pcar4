@@ -25,8 +25,10 @@ import {
     ScreenPoint,
     Screenshot,
     ScaleSet,
-    SpatialReference
+    SpatialReference,
+    UrlWrapper
 } from '@/geo/api';
+import { debounce } from 'throttle-debounce';
 import { EsriGraphic, EsriLOD, EsriMapView } from '@/geo/esri';
 import { LayerStore } from '@/store/modules/layer';
 import { MapCaptionAPI } from './caption';
@@ -209,6 +211,43 @@ export class MapAPI extends CommonMapAPI {
             GlobalEvents.MAP_BASEMAPCHANGE,
             config.initialBasemapId
         );
+
+        this.$iApi.event.on(
+            GlobalEvents.MAP_EXTENTCHANGE,
+            debounce(1000, false, () => {
+                if (this.$iApi.geo.map.getZoomLevel() !== -1) {
+                    // update the url's zoom parameter
+                    const wrapper = new UrlWrapper(window.location.href);
+                    // console.log(
+                    //     'map_extentchange:',
+                    //     wrapper.queryMap['zoom'],
+                    //     this.$iApi.geo.map.getZoomLevel()
+                    // );
+                    // console.log(this.$iApi.geo.map.getExtent().center());
+                    const newUrl = wrapper.updateQuery({
+                        zoom: this.$iApi.geo.map.getZoomLevel().toString()
+                    });
+                    if (window.location.href !== newUrl) {
+                        window.history.pushState({ path: newUrl }, '', newUrl);
+                    }
+                }
+            })
+        );
+
+        this.$iApi.event.on(GlobalEvents.MAP_CREATED, () => {
+            const wrapper = new UrlWrapper(window.location.href);
+            // zoom level is always -1 at this point, which is probably why we're getting errors from goto()
+            // it would be better to put this code after the zoom level gets set for the first time
+            if (
+                wrapper.queryMap['zoom']
+                // && this.$iApi.geo.map.getZoomLevel() !== -1
+            ) {
+                // set the map's zoom level to the zoom level specified in the url
+                this.$iApi.geo.map.zoomToLevel(
+                    parseInt(wrapper.queryMap['zoom'])
+                );
+            }
+        });
     }
 
     /**
